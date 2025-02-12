@@ -376,6 +376,8 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     #     dropdown = Select(driver.find_element(By.NAME, "searchRadius"))
     #     dropdown.select_by_value("0") # corresponds to nationwide. otherwise choose a # of miles
 
+    time.sleep(wait_time) # be smarter and wait until things are actually loaded.
+    # or scroll down and scroll back up
 
     # print("make/model search - initiate scrolling")
     scroll_down_incrementally(driver)
