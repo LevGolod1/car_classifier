@@ -1,0 +1,70 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Virtual environment
+venv/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyCharm files
+.idea/
+*.iml
+
+# VS Code settings
+.vscode/
+
+# Logs and local database files
+*.log
+*.sqlite3
+
+# Cache files
+.cache/
+__pycache__/
+
+# Test coverage and profiling
+.coverage
+*.cover
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore environment variables and secrets
+.env
+*.pem
+*.key
+
+# Compiled Cython files
+*.c
+*.cpp
+
+# Large data files (optional)
+data/
+*.jpg
+*.csv
+*.json
+*.h5
+*.pickle
+*.pkl
+
+# Model weights (optional)
+models/
+*.h5
+*.ckpt
+*.pt
+*.onnx
+
+# Auto-generated docs
+docs/_build/
+
+# macOS system files
+.DS_Store
+
+# Git ignore self (just in case)
+.gitignore
