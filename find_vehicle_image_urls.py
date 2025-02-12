@@ -217,7 +217,7 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
     return image_urls
 
 
-def process_vehicle_webpage(url:str, quit:bool=True):
+def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
 
     url_cleaned = clean_vehicle_url(url)
     vehicle_id = url_cleaned.split('/')[-1]
@@ -226,7 +226,7 @@ def process_vehicle_webpage(url:str, quit:bool=True):
     driver = firefox_driver_init(headless=headless)
 
     ## giant try-except because otherwise the driver will not get closed at the end
-    df=None
+    df=pd.DataFrame()
     try:
 
         driver.get(url_cleaned)
@@ -337,9 +337,10 @@ def process_vehicle_webpage(url:str, quit:bool=True):
 
     except Exception as e:
         error_message = traceback.format_exc()
-        print(f"find_vehicle_image_urls [{url}] Error Traceback:\n", error_message)
+        print(f"process_vehicle_webpage [{url}] Error Traceback:\n", error_message)
         driver.quit()
         driver = None
+        df = pd.DataFrame()
 
 
     return df, driver
