@@ -25,7 +25,8 @@ from timethis import timethis
 ####################################
 ### Settings
 geckodriver_path = "/usr/local/bin/geckodriver"
-parent_directory_url_csvs='./data/autotrader/vehicle_metadata/'
+parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
+parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
 wait_time=10
 scroll_pause_time = 0.5  # Adjust based on load time
 scroll_distance = 500 # pixels
@@ -221,77 +222,91 @@ def process_vehicle_webpage(url:str, quit:bool=True):
 
     ## initialize browser session
     driver = firefox_driver_init(headless=headless)
-    driver.get(url_cleaned)
-    print(f"single vehicle listing [{url_cleaned}]- webpage initiated")
 
-    ## capture year make model as text
-    year_make_model_element = WebDriverWait(driver, wait_time).until(
-            EC.visibility_of_element_located(
-                (By.CSS_SELECTOR, 'h1[data-cmp="heading"]#vehicle-details-heading')
+    ## giant try-except because otherwise the driver will not get closed at the end
+    df=None
+    try:
+
+        driver.get(url_cleaned)
+        print(f"single vehicle listing [{url_cleaned}]- webpage initiated\n")
+
+        ## capture year make model as text
+        year_make_model_element = WebDriverWait(driver, wait_time).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, 'h1[data-cmp="heading"]#vehicle-details-heading')
+                )
             )
-        )
 
-    year_make_model = year_make_model_element.text
+        year_make_model = year_make_model_element.text
 
-    ## listing price
-    list_price_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="listingPrice"]')
-    list_price_clean = clean_text_remove_newline(list_price_element.text)
-    list_price_clean = list_price_clean.split('^')[-1].strip()
-
-
-    ## VIN
-    vin_element = driver.find_element(By.CSS_SELECTOR, 'span.display-block.display-sm-inline-block')
-    vin = get_clean_vin(vin_element.text)
+        ## listing price
+        list_price_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="listingPrice"]')
+        list_price_clean = clean_text_remove_newline(list_price_element.text)
+        list_price_clean = list_price_clean.split('^')[-1].strip()
 
 
-    ## listing details e.g. mileage
-    listing_detail_element = driver.find_element(By.CSS_SELECTOR, 'ul[data-cmp="listColumns"].list.columns.columns-1')
-    listing_detail = listing_detail_element.text
-    listing_detail_clean = clean_text_remove_newline(listing_detail)
-
-    listing_narrative_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="seeMore"]')
-    listing_narrative = clean_text_remove_newline(listing_narrative_element.text)
-
-    ## attept to use View ALl Media button if it exists
-    try:
-        image_urls = get_image_urls_from_view_all_media_button(driver)
-        print(f'get_image_urls_from_view_all_media_button - success')
-
-    except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
-        image_urls=[]
-        print(f'get_image_urls_from_view_all_media_button - fail')
-
-    ## also attempt to just get the header image
-    try:
-        header_image_url = driver.find_element(By.CSS_SELECTOR, '[data-cmp="responsiveImage"]').get_attribute('src')
-        image_urls +=[header_image_url]
-        print(f'header image - success')
-    except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
-        print(f'header image - fail')
+        ## VIN
+        vin_element = driver.find_element(By.CSS_SELECTOR, 'span.display-block.display-sm-inline-block')
+        vin = get_clean_vin(vin_element.text)
 
 
-    message = f'found {len(image_urls)} images'
-    print(message)
+        ## listing details e.g. mileage
+        listing_detail_element = driver.find_element(By.CSS_SELECTOR, 'ul[data-cmp="listColumns"].list.columns.columns-1')
+        listing_detail = listing_detail_element.text
+        listing_detail_clean = clean_text_remove_newline(listing_detail)
 
-    if quit:
+        listing_narrative_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="seeMore"]')
+        listing_narrative = clean_text_remove_newline(listing_narrative_element.text)
+
+        ## also attempt to just get the header image
+        try:
+            header_image_url = driver.find_element(By.CSS_SELECTOR, '[data-cmp="responsiveImage"]').get_attribute('src')
+            print(f'header image - success')
+        except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
+            header_image_url = None
+            print(f'header image - fail')
+
+        ## attept to use View ALl Media button if it exists
+        try:
+            image_urls = get_image_urls_from_view_all_media_button(driver)
+            print(f'get_image_urls_from_view_all_media_button - success')
+
+        except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
+            image_urls=[]
+            print(f'get_image_urls_from_view_all_media_button - fail')
+
+        if header_image_url is not None:
+            image_urls+=[str(header_image_url)]
+
+        message = f'found {len(image_urls)} images'
+        print(message)
+
+        if quit:
+            driver.quit()
+            driver = None
+
+        ## save to disk
+        df = pd.DataFrame({'vehicle_image_url': image_urls})
+        df['vehicle_id']= vehicle_id
+        df['url']= url_cleaned
+        df['vin']= vin
+        df['year_make_model'] = year_make_model
+        df['list_price'] = list_price_clean
+        df['listing_details'] = listing_detail_clean
+        df['listing_narrative'] = listing_narrative
+        df=df.drop_duplicates()
+        print(df.head(1).T)
+        filepath = f'{parent_directory_url_csvs}{vehicle_id}.csv'
+        message=f'saving to {filepath}'
+        print(message)
+        df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
+
+    except Exception as e:
+        error_message = traceback.format_exc()
+        print(f"find_vehicle_image_urls [{url}] Error Traceback:\n", error_message)
         driver.quit()
         driver = None
 
-    ## save to disk
-    df = pd.DataFrame({'vehicle_image_url': image_urls})
-    df['vehicle_id']= vehicle_id
-    df['url']= url_cleaned
-    df['vin']= vin
-    df['year_make_model'] = year_make_model
-    df['list_price'] = list_price_clean
-    df['listing_details'] = listing_detail_clean
-    df['listing_narrative'] = listing_narrative
-    df=df.drop_duplicates()
-    print(df.head(1).T)
-    filepath = f'{parent_directory_url_csvs}{vehicle_id}.csv'
-    message=f'saving to {filepath}'
-    print(message)
-    df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
 
     return df, driver
 
@@ -317,15 +332,8 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     if driver is None:
 
         driver = firefox_driver_init(headless=headless)
-        # firefox_options = Options()
-        # if headless:
-        #     firefox_options.add_argument("--headless")
-        #
-        # service = Service(geckodriver_path)
-        # driver = webdriver.Firefox(service=service, options=firefox_options)
-
         driver.get(url)
-        print(f"make/model search [{url}] webpage initiated")
+        print(f"make/model search [{url}] webpage initiated\n")
 
     ## think about editing the search distance (default is only 50 which may be inadequate for rare cars)
     # instead of interacting w the dropdown menu like a caveperson, I can just manipulate the url (big brain)
@@ -378,6 +386,86 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     return df, driver
 
 
+def compile_search_results_df() ->pd.DataFrame:
+    '''
+    :return:
+    DF where each row represents on vehicle listing with a unique url and vehicle id
+
+    Also contains make/model of the SEARCH from which the url was captured
+    NB: This might not be the make/model of the actual vehicle;
+     The vehicle listing page is the ultimate source of truth on the make/model of the vehicle
+
+    '''
+    ## compile search results from multiple csvs intoo one df
+    # folder="/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/"
+    folder=parent_directory_url_csvs
+    pattern=r'search_results_.*[0-9]*csv'
+    usecols=['listing_header',
+     'url',
+     'search_url',
+     'make',
+     'model',
+     'search_timestamp',
+     'search_metadata']
+    # bigdf= pd.DataFrame(columns=usecols)
+    bigdf= None
+
+    files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
+
+    # file=files[0]
+    for file in files:
+        print(file)
+        try:
+            df=pd.read_csv(folder+file, usecols=usecols)
+            df=df[usecols]
+            df['filename']=file
+        except ValueError:
+            print(f'File {file} wrong columns, skipping')
+            continue
+
+
+        bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
+        # bigdf=bigdf.drop_duplicates(subset=['url'])
+        print(bigdf.shape)
+
+    bigdf['url_clean'] = bigdf['url'].apply(clean_vehicle_url)
+    bigdf['vehicle_id'] = bigdf['url_clean'].apply(lambda x: str(x).split('/')[-1] )
+
+    bigdf.head()
+    return bigdf
+
+def compile_image_urls_df():
+    folder=parent_directory_url_csvs
+    pattern=r'^[0-9]*\.csv'
+    dtypes={'vehicle_image_url': 'str',
+    'vehicle_id': 'int',
+    'url': 'str',
+    'vin': 'str',
+    'year_make_model': 'str',
+    'list_price': 'str',
+    'listing_details': 'str',
+    'listing_narrative': 'str'}
+    bigdf=None
+    usecols = list(dtypes.keys())
+    1
+
+    files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
+
+    for file in files:
+        print(file)
+        try:
+            df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
+            df=df[usecols]
+            df['filename']=file
+        except ValueError:
+            print(f'File {file} wrong columns, skipping')
+            continue
+
+
+        bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
+        print(bigdf.shape)
+
+    return bigdf
 
 
 if __name__ == '__main__':
@@ -385,7 +473,8 @@ if __name__ == '__main__':
 
     # try out process_vehicle_webpage
     urls = [
-        'https://www.autotrader.com/cars-for-sale/vehicle/725617155',
+        # 'https://www.autotrader.com/cars-for-sale/vehicle/725617155',
+        'https://www.autotrader.com/cars-for-sale/vehicle/737254800',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/739471281?LNX=SPGOOGLEBRANDPLUSMAKE&city=San%20Diego&ds_rl=1289689&gad_source=1&gclid=CjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE&gclsrc=aw.ds&listingType=USED&makeCode=TOYOTA&modelCode=CAMRY&referrer=%2Ftoyota%2Fcamry%3FLNX%3DSPGOOGLEBRANDPLUSMAKE%26ds_rl%3D1289689%26gad_source%3D1%26gclid%3DCjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE%26gclsrc%3Daw.ds%26utm_campaign%3Dat_na_na_national_evergreen_roi_na_na%26utm_content%3Dkeyword_text_na_na_na_spgooglebrandplusmake_na%26utm_medium%3Dsem_brand-plus_perf%26utm_source%3DGOOGLE%26utm_term%3Dautotrader%2520toyota%2520camry&state=CA&utm_campaign=at_na_na_national_evergreen_roi_na_na&utm_content=keyword_text_na_na_na_spgooglebrandplusmake_na&utm_medium=sem_brand-plus_perf&utm_source=GOOGLE&utm_term=autotrader%20toyota%20camry&zip=92101&clickType=listing',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/736665996?city=Irvine&listingType=USED&makeCode=POR&modelCode=PORTAYCAN&referrer=%2Fporsche%2Ftaycan%3F&state=CA&zip=92604&clickType=listing'
     ]
