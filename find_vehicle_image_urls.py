@@ -390,7 +390,8 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
 
 def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True) -> tuple:
 
-    search_radius=0 # this corresponds to nationwide
+    search_radius=0 # 0 corresponds to nationwide
+    first_record=50000
     make, model = vehicle_info['make'], vehicle_info['model']
     df_geog = load_geog_df()
 
@@ -398,6 +399,7 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     zipcode = vehicle_info.get('zipcode')
     city_state = vehicle_info.get('city_state_lower')
     if zipcode is None:
+        print('choose random location within USA')
         location = list(df_geog.sample(n=1).to_dict('records'))[0]
         zipcode = location['zip']
         city_state = location['city_state_lower']
@@ -406,7 +408,7 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     ## user args specify make, model, and search zipcode
     # the url specifies a nationwide search, sorted by distance
     # url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{zipcode}?searchRadius=0&sortBy=distanceASC'
-    url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{city_state}?firstRecord=5000&searchRadius={search_radius}&sortBy=distanceASC&zip={zipcode}'
+    url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{city_state}?firstRecord={first_record}&searchRadius={search_radius}&sortBy=datelistedDESC&zip={zipcode}'
     # https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
 
     url = url_template.format(make=make, model=model,zipcode=zipcode)
@@ -586,7 +588,9 @@ if __name__ == '__main__':
     vehicles_to_search = [
         # {'make':'alfa-romeo','model':'4c'},
         # {'make':'porsche','model':'taycan'},
-        {'make': 'ford', 'model': 'f150'},
+        # {'make': 'ford', 'model': 'f150','zipcode':'92604','city_state_lower':'irvine-ca'},
+        {'make': 'ford', 'model': 'f150','zipcode':'83223','city_state_lower':'bloomington-id'},
+        {'make': 'bmw', 'model': '4-series','zipcode':'92604','city_state_lower':'irvine-ca'},
         # {'make': 'hyundai','model':'ioniq5'}
         # {'make': 'hyundai','model':'asgadgadhadhsfqtdhg'}
     ]
