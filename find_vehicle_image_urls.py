@@ -5,7 +5,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
-
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
 
@@ -117,7 +117,7 @@ def find_vehicle_listing_links(driver) -> list:
         )
         elements = driver.find_elements(By.XPATH, '//a[starts-with(@href, "/cars-for-sale/vehicle/")]')
 
-    except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
+    except (NoSuchElementException, TimeoutException):
         elements =[]
 
 
@@ -214,6 +214,8 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
             break
         last_length = new_length
 
+    return image_urls
+
 
 def process_vehicle_webpage(url:str, quit:bool=True):
 
@@ -231,47 +233,79 @@ def process_vehicle_webpage(url:str, quit:bool=True):
         print(f"single vehicle listing [{url_cleaned}]- webpage initiated\n")
 
         ## capture year make model as text
-        year_make_model_element = WebDriverWait(driver, wait_time).until(
+        try:
+            year_make_model_element = WebDriverWait(driver, wait_time).until(
                 EC.visibility_of_element_located(
                     (By.CSS_SELECTOR, 'h1[data-cmp="heading"]#vehicle-details-heading')
                 )
             )
+            year_make_model = year_make_model_element.text
+            print(f'year_make_model - success')
+        except (NoSuchElementException, TimeoutException):
+            year_make_model = None
+            print(f'year_make_model - fail')
+            
 
-        year_make_model = year_make_model_element.text
 
         ## listing price
-        list_price_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="listingPrice"]')
-        list_price_clean = clean_text_remove_newline(list_price_element.text)
-        list_price_clean = list_price_clean.split('^')[-1].strip()
+        # todo if this fails can try to get it from the image gallery
+        '''
+        <div class="modal-header"><h4 id="modal-title" class="modal-title">Used 2022 Porsche Taycan<span class="text-normal"> - $60,944</span>
+        </h4><button data-cmp="closeButton" class="close" aria-label="Close" type="button"><span class="glyphicon glyphicon-remove"></span></button></div>
+        '''
+        try:
+            list_price_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="listingPrice"]')
+            list_price = clean_text_remove_newline(list_price_element.text)
+            list_price = list_price.split('^')[-1].strip()
+            print(f'list_price - success')
+        except (NoSuchElementException, TimeoutException):
+            list_price = None
+            print(f'list_price - fail')
 
 
         ## VIN
-        vin_element = driver.find_element(By.CSS_SELECTOR, 'span.display-block.display-sm-inline-block')
-        vin = get_clean_vin(vin_element.text)
+        try:
+            vin_element = driver.find_element(By.CSS_SELECTOR, 'span.display-block.display-sm-inline-block')
+            vin = get_clean_vin(vin_element.text)
+            print(f'vin - success')
+        except (NoSuchElementException, TimeoutException):
+            vin = None
+            print(f'vin - fail')
 
 
         ## listing details e.g. mileage
-        listing_detail_element = driver.find_element(By.CSS_SELECTOR, 'ul[data-cmp="listColumns"].list.columns.columns-1')
-        listing_detail = listing_detail_element.text
-        listing_detail_clean = clean_text_remove_newline(listing_detail)
+        try:
+            listing_detail_element = driver.find_element(By.CSS_SELECTOR, 'ul[data-cmp="listColumns"].list.columns.columns-1')
+            listing_detail = listing_detail_element.text
+            listing_detail = clean_text_remove_newline(listing_detail)
+            print(f'listing_detail - success')
+        except (NoSuchElementException, TimeoutException):
+            listing_detail = None
+            print(f'listing_detail - fail')
 
-        listing_narrative_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="seeMore"]')
-        listing_narrative = clean_text_remove_newline(listing_narrative_element.text)
+        try:
+            listing_narrative_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="seeMore"]')
+            listing_narrative = clean_text_remove_newline(listing_narrative_element.text)
+            print(f'listing_narrative - success')
+        except (NoSuchElementException, TimeoutException):
+            listing_narrative = None
+            print(f'listing_narrative - fail')
+
 
         ## also attempt to just get the header image
         try:
             header_image_url = driver.find_element(By.CSS_SELECTOR, '[data-cmp="responsiveImage"]').get_attribute('src')
             print(f'header image - success')
-        except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
+        except (NoSuchElementException, TimeoutException):
             header_image_url = None
             print(f'header image - fail')
 
         ## attept to use View ALl Media button if it exists
         try:
             image_urls = get_image_urls_from_view_all_media_button(driver)
-            print(f'get_image_urls_from_view_all_media_button - success')
+            print(f'get_image_urls_from_view_all_media_button - success - {len(image_urls)}')
 
-        except (selenium.common.exceptions.NoSuchElementException, selenium.common.exceptions.TimeoutException):
+        except (NoSuchElementException, TimeoutException):
             image_urls=[]
             print(f'get_image_urls_from_view_all_media_button - fail')
 
@@ -291,8 +325,8 @@ def process_vehicle_webpage(url:str, quit:bool=True):
         df['url']= url_cleaned
         df['vin']= vin
         df['year_make_model'] = year_make_model
-        df['list_price'] = list_price_clean
-        df['listing_details'] = listing_detail_clean
+        df['list_price'] = list_price
+        df['listing_details'] = listing_detail
         df['listing_narrative'] = listing_narrative
         df=df.drop_duplicates()
         print(df.head(1).T)
@@ -474,7 +508,7 @@ if __name__ == '__main__':
     # try out process_vehicle_webpage
     urls = [
         # 'https://www.autotrader.com/cars-for-sale/vehicle/725617155',
-        'https://www.autotrader.com/cars-for-sale/vehicle/737254800',
+        'https://www.autotrader.com/cars-for-sale/vehicle/739886024',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/739471281?LNX=SPGOOGLEBRANDPLUSMAKE&city=San%20Diego&ds_rl=1289689&gad_source=1&gclid=CjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE&gclsrc=aw.ds&listingType=USED&makeCode=TOYOTA&modelCode=CAMRY&referrer=%2Ftoyota%2Fcamry%3FLNX%3DSPGOOGLEBRANDPLUSMAKE%26ds_rl%3D1289689%26gad_source%3D1%26gclid%3DCjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE%26gclsrc%3Daw.ds%26utm_campaign%3Dat_na_na_national_evergreen_roi_na_na%26utm_content%3Dkeyword_text_na_na_na_spgooglebrandplusmake_na%26utm_medium%3Dsem_brand-plus_perf%26utm_source%3DGOOGLE%26utm_term%3Dautotrader%2520toyota%2520camry&state=CA&utm_campaign=at_na_na_national_evergreen_roi_na_na&utm_content=keyword_text_na_na_na_spgooglebrandplusmake_na&utm_medium=sem_brand-plus_perf&utm_source=GOOGLE&utm_term=autotrader%20toyota%20camry&zip=92101&clickType=listing',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/736665996?city=Irvine&listingType=USED&makeCode=POR&modelCode=PORTAYCAN&referrer=%2Fporsche%2Ftaycan%3F&state=CA&zip=92604&clickType=listing'
     ]
@@ -482,7 +516,7 @@ if __name__ == '__main__':
     for url in urls:
         print(url)
         with timethis():
-            process_vehicle_webpage(url)
+            process_vehicle_webpage(url, False)
 
 
     # ## try out find_listings_for_make_model
