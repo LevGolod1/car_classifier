@@ -537,4 +537,6 @@ if __name__ == '__main__':
 
     '''
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
+    https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=50&searchRadius=100&sortBy=distanceASC&zip=92101
+    https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=92101
     '''
