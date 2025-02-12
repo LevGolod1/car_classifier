@@ -35,16 +35,29 @@ max_scrolls = 100
 headless=False
 ####################################
 
-def load_zipcodes() -> list:
+def load_geog_df() -> pd.DataFrame:
     '''
     Source https://simplemaps.com/data/us-zips
     :return:
+    beverly-hills-ca
     '''
     # zips_filepath='~/Projects/car_classifier/data/simplemaps_uszips_basicv1.90/uszips.csv'
     zips_filepath='./data/simplemaps_uszips_basicv1.90/uszips.csv'
     zips_df = pd.read_csv(zips_filepath)
     zips_df['zip'] =zips_df['zip'].astype(str).str.zfill(5)
+    zips_df['city_state_lower'] = zips_df['city'].str.lower().str.replace(' ','-') + '-' + \
+                                  zips_df['state_id'].str.lower()
+    return zips_df
+
+
+def load_zipcodes() -> list:
+    '''
+    Source https://simplemaps.com/data/us-zips
+    :return:
+    '''
+    zips_df = load_geog_df()
     return list(zips_df['zip'])
+
 
 
 def clean_vehicle_url(url:str) -> str:
@@ -126,6 +139,26 @@ def find_vehicle_listing_links(driver) -> list:
         elements
     ))
 
+
+def wait_for_scrollbar(driver, timeout=wait_time):
+    """
+    Waits for the scrollbar to appear on the webpage.
+
+    :param driver: Selenium WebDriver instance
+    :param timeout: Maximum time (in seconds) to wait for the scrollbar
+    :return: True if scrollbar exists, False otherwise
+    """
+    try:
+        WebDriverWait(driver, timeout).until(
+            lambda d: driver.execute_script("return document.body.scrollHeight") > driver.execute_script("return window.innerHeight")
+        )
+        print("Scrollbar detected!")
+        return True
+    except:
+        print("No scrollbar found after waiting.")
+        return False
+
+
 def get_scroll_percentage(driver):
     """Returns how far down the page is scrolled as a percentage."""
     scroll_top = driver.execute_script("return window.scrollY;")  # Current scroll position
@@ -137,7 +170,7 @@ def get_scroll_percentage(driver):
     return round(scroll_percentage, 2)
 
 
-def scroll_down_incrementally(driver, scroll_distance=scroll_distance, wait=0.05, verbose=False):
+def scroll_down_incrementally(driver, scroll_distance=scroll_distance, wait=0.1, verbose=False):
     # todo should start by scrolling all the way to the top?
     current_pct = get_scroll_percentage(driver)
     i=0
@@ -149,6 +182,12 @@ def scroll_down_incrementally(driver, scroll_distance=scroll_distance, wait=0.05
         driver.execute_script(f"window.scrollBy(0, {scroll_distance});")
         current_pct = get_scroll_percentage(driver)
         time.sleep(wait)
+
+
+def check_for_site_unavailable(driver):
+    return 'site is currently unavailable' in str(driver.page_source)
+
+
 
 def create_random_user_agent():
     software_names = [SoftwareName.CHROME.value, SoftwareName.FIREFOX.value]
@@ -215,6 +254,8 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
         last_length = new_length
 
     return image_urls
+
+
 
 
 def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
@@ -347,25 +388,33 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
 
 
 
-def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True) -> pd.DataFrame:
+def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True) -> tuple:
 
+    search_radius=0 # this corresponds to nationwide
     make, model = vehicle_info['make'], vehicle_info['model']
-    all_zip_codes = load_zipcodes()
-    zipcode = vehicle_info.get('zipcode')
-    if zipcode is None:
-        zipcode = random.choice(all_zip_codes)
+    df_geog = load_geog_df()
 
+
+    zipcode = vehicle_info.get('zipcode')
+    city_state = vehicle_info.get('city_state_lower')
+    if zipcode is None:
+        location = list(df_geog.sample(n=1).to_dict('records'))[0]
+        zipcode = location['zip']
+        city_state = location['city_state_lower']
 
 
     ## user args specify make, model, and search zipcode
     # the url specifies a nationwide search, sorted by distance
-    url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{zipcode}?searchRadius=0&sortBy=distanceASC'
+    # url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{zipcode}?searchRadius=0&sortBy=distanceASC'
+    url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{city_state}?firstRecord=5000&searchRadius={search_radius}&sortBy=distanceASC&zip={zipcode}'
+    # https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
+
     url = url_template.format(make=make, model=model,zipcode=zipcode)
     print(f"attempt to access webpage [{url}]")
+    #
 
     ## initialize browser session - unless of course it is already initialized
     if driver is None:
-
         driver = firefox_driver_init(headless=headless)
         driver.get(url)
         print(f"make/model search [{url}] webpage initiated\n")
@@ -377,8 +426,18 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     #     dropdown = Select(driver.find_element(By.NAME, "searchRadius"))
     #     dropdown.select_by_value("0") # corresponds to nationwide. otherwise choose a # of miles
 
-    time.sleep(wait_time) # be smarter and wait until things are actually loaded.
-    # or scroll down and scroll back up
+    # time.sleep(wait_time) # be smarter and wait until things are actually loaded.
+
+    scrollbar_exists = wait_for_scrollbar(driver)
+
+    page_unavailable = check_for_site_unavailable(driver)
+
+    if (not scrollbar_exists) or page_unavailable:
+        message=f'scrollbar failed to load {not scrollbar_exists} and/or page_unavailable {page_unavailable}; that is not good!'
+        print(message)
+        driver.quit()
+        return pd.DataFrame(), None
+
 
     # print("make/model search - initiate scrolling")
     scroll_down_incrementally(driver)
@@ -407,6 +466,7 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
         driver = None
 
     df = pd.DataFrame(vehicle_listing_links, columns=['listing_header', 'url'])
+    df = df.drop_duplicates()
     df['search_url'] = current_url
     ts = int(time.time())
     df['make']= make
@@ -511,7 +571,7 @@ if __name__ == '__main__':
     # try out process_vehicle_webpage
     urls = [
         # 'https://www.autotrader.com/cars-for-sale/vehicle/725617155',
-        'https://www.autotrader.com/cars-for-sale/vehicle/739886024',
+        # 'https://www.autotrader.com/cars-for-sale/vehicle/739886024',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/739471281?LNX=SPGOOGLEBRANDPLUSMAKE&city=San%20Diego&ds_rl=1289689&gad_source=1&gclid=CjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE&gclsrc=aw.ds&listingType=USED&makeCode=TOYOTA&modelCode=CAMRY&referrer=%2Ftoyota%2Fcamry%3FLNX%3DSPGOOGLEBRANDPLUSMAKE%26ds_rl%3D1289689%26gad_source%3D1%26gclid%3DCjwKCAiA5Ka9BhB5EiwA1ZVtvHjCtPelBybjmSVqEfXhXQ4FoLUB_-DHe9sxqf7bMrntLKD3J1AJKRoCz-8QAvD_BwE%26gclsrc%3Daw.ds%26utm_campaign%3Dat_na_na_national_evergreen_roi_na_na%26utm_content%3Dkeyword_text_na_na_na_spgooglebrandplusmake_na%26utm_medium%3Dsem_brand-plus_perf%26utm_source%3DGOOGLE%26utm_term%3Dautotrader%2520toyota%2520camry&state=CA&utm_campaign=at_na_na_national_evergreen_roi_na_na&utm_content=keyword_text_na_na_na_spgooglebrandplusmake_na&utm_medium=sem_brand-plus_perf&utm_source=GOOGLE&utm_term=autotrader%20toyota%20camry&zip=92101&clickType=listing',
         # 'https://www.autotrader.com/cars-for-sale/vehicle/736665996?city=Irvine&listingType=USED&makeCode=POR&modelCode=PORTAYCAN&referrer=%2Fporsche%2Ftaycan%3F&state=CA&zip=92604&clickType=listing'
     ]
@@ -523,20 +583,22 @@ if __name__ == '__main__':
 
 
     # ## try out find_listings_for_make_model
-    # vehicles_to_search = [
-    #     # {'make':'alfa-romeo','model':'4c'},
-    #     {'make':'porsche','model':'taycan'},
-    #     # {'make': 'hyundai','model':'ioniq5'}
-    #     # {'make': 'hyundai','model':'asgadgadhadhsfqtdhg'}
-    # ]
-    # for vehicle_info in vehicles_to_search:
-    #     print(vehicle_info)
-    #     with timethis():
-    #         find_listings_for_make_model(vehicle_info, False)
+    vehicles_to_search = [
+        # {'make':'alfa-romeo','model':'4c'},
+        # {'make':'porsche','model':'taycan'},
+        {'make': 'ford', 'model': 'f150'},
+        # {'make': 'hyundai','model':'ioniq5'}
+        # {'make': 'hyundai','model':'asgadgadhadhsfqtdhg'}
+    ]
+    for vehicle_info in vehicles_to_search:
+        print(vehicle_info)
+        with timethis():
+            find_listings_for_make_model(vehicle_info)
 
 
     '''
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=50&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=92101
+    https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
     '''
