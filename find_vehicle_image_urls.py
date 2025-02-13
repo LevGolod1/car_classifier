@@ -10,6 +10,7 @@ from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
 
 import random
+import datetime as dt
 import time
 import matplotlib.pyplot as plt
 import re
@@ -34,6 +35,31 @@ max_scrolls = 100
 # headless=True
 headless=False
 ####################################
+
+def get_vehicle_make_model_list():
+    vehicles = [
+        {'make': 'bmw', 'model': '4-series', 'body_style': 'sedan'},
+        {'make': 'bmw', 'model': '3-series', 'body_style': 'sedan'},
+        {'make': 'bmw', 'model': 'x5', 'body_style': 'suv'},
+        {'make': 'bmw', 'model': 'z4', 'body_style': 'sportscar'},
+        {'make': 'ford', 'model': 'taurus', 'body_style': 'sedan'},
+        {'make': 'ford', 'model': 'f150', 'body_style': 'truck'},
+        {'make': 'ford', 'model': 'explorer', 'body_style': 'suv'},
+        {'make': 'honda', 'model': 'ridgeline', 'body_style': 'truck'},
+        {'make': 'honda', 'model': 'odyssey', 'body_style': 'van'},
+        {'make': 'honda', 'model': 'accord', 'body_style': 'sedan'},
+        {'make': 'honda', 'model': 'civic', 'body_style': 'sedan'},
+        {'make': 'honda', 'model': 'passport', 'body_style': 'suv'},
+        {'make': 'toyota', 'model': 'camry', 'body_style': 'sedan'},
+        {'make': 'toyota', 'model': 'crown', 'body_style': 'sedan'},
+        {'make': 'toyota', 'model': 'tacoma', 'body_style': 'truck'},
+        {'make': 'toyota', 'model': 'tundra', 'body_style': 'truck'},
+        {'make': 'toyota', 'model': 'corolla', 'body_style': 'sedan'},
+        {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
+        {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
+    ]
+    return vehicles
+
 
 def load_geog_df() -> pd.DataFrame:
     '''
@@ -285,7 +311,14 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
         except (NoSuchElementException, TimeoutException):
             year_make_model = None
             print(f'year_make_model - fail')
-            
+
+        page_unavailable = check_for_site_unavailable(driver)
+
+        if  page_unavailable:
+            message=f' page_unavailable {page_unavailable}; that is not good!'
+            print(message)
+            driver.quit()
+            return pd.DataFrame(), None
 
 
         ## listing price
@@ -361,20 +394,24 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
             driver = None
 
         ## save to disk
-        df = pd.DataFrame({'vehicle_image_url': image_urls})
-        df['vehicle_id']= vehicle_id
-        df['url']= url_cleaned
-        df['vin']= vin
-        df['year_make_model'] = year_make_model
-        df['list_price'] = list_price
-        df['listing_details'] = listing_detail
-        df['listing_narrative'] = listing_narrative
-        df=df.drop_duplicates()
-        print(df.head(1).T)
-        filepath = f'{parent_directory_url_csvs}{vehicle_id}.csv'
-        message=f'saving to {filepath}'
-        print(message)
-        df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
+        if len(image_urls) >0:
+            df = pd.DataFrame({'vehicle_image_url': image_urls})
+            df['vehicle_id']= vehicle_id
+            df['url']= url_cleaned
+            df['vin']= vin
+            df['year_make_model'] = year_make_model
+            df['list_price'] = list_price
+            df['listing_details'] = listing_detail
+            df['listing_narrative'] = listing_narrative
+            df=df.drop_duplicates()
+            print(df.head(1).T)
+            filepath = f'{parent_directory_url_csvs}{vehicle_id}.csv'
+            message=f'saving to {filepath}'
+            print(message)
+            df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
+        else:
+            print(f'no images; not saving csv')
+
 
     except Exception as e:
         error_message = traceback.format_exc()
@@ -387,15 +424,14 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
     return df, driver
 
 
-
 def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True) -> tuple:
 
-    search_radius=0 # 0 corresponds to nationwide
-    first_record=50000
-    make, model = vehicle_info['make'], vehicle_info['model']
     df_geog = load_geog_df()
+    search_radius=0 # 0 corresponds to nationwide
+    sort_by='distanceASC' # e.g. 'datelistedDESC','distanceASC'
 
-
+    make, model = vehicle_info['make'], vehicle_info['model']
+    first_record = int(vehicle_info.get('first_record', 0)) # 5000
     zipcode = vehicle_info.get('zipcode')
     city_state = vehicle_info.get('city_state_lower')
     if zipcode is None:
@@ -405,10 +441,9 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
         city_state = location['city_state_lower']
 
 
-    ## user args specify make, model, and search zipcode
-    # the url specifies a nationwide search, sorted by distance
-    # url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{zipcode}?searchRadius=0&sortBy=distanceASC'
-    url_template = f'https://www.autotrader.com/cars-for-sale/{make}/{model}/{city_state}?firstRecord={first_record}&searchRadius={search_radius}&sortBy=datelistedDESC&zip={zipcode}'
+    ## you can do a lot by messing with the url, you know. really quite a bit. not everyone knows that.
+    url_template = 'https://www.autotrader.com/cars-for-sale/' + \
+        f'{make}/{model}/{city_state}?firstRecord={first_record}&searchRadius={search_radius}&sortBy={sort_by}&zip={zipcode}'
     # https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
 
     url = url_template.format(make=make, model=model,zipcode=zipcode)
@@ -418,69 +453,73 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
     ## initialize browser session - unless of course it is already initialized
     if driver is None:
         driver = firefox_driver_init(headless=headless)
+
+    ## giant try-except because otherwise the driver will not get closed at the end
+    df=pd.DataFrame()
+    try:
+
         driver.get(url)
         print(f"make/model search [{url}] webpage initiated\n")
 
-    ## think about editing the search distance (default is only 50 which may be inadequate for rare cars)
-    # instead of interacting w the dropdown menu like a caveperson, I can just manipulate the url (big brain)
-    # nationwide= True
-    # if nationwide:
-    #     dropdown = Select(driver.find_element(By.NAME, "searchRadius"))
-    #     dropdown.select_by_value("0") # corresponds to nationwide. otherwise choose a # of miles
+        # time.sleep(wait_time) # be smarter and wait until things are actually loaded.
+        scrollbar_exists = wait_for_scrollbar(driver)
 
-    # time.sleep(wait_time) # be smarter and wait until things are actually loaded.
+        page_unavailable = check_for_site_unavailable(driver)
 
-    scrollbar_exists = wait_for_scrollbar(driver)
+        if (not scrollbar_exists) or page_unavailable:
+            message=f'scrollbar failed to load {not scrollbar_exists} and/or page_unavailable {page_unavailable}; that is not good!'
+            print(message)
+            driver.quit()
+            return pd.DataFrame(), None
 
-    page_unavailable = check_for_site_unavailable(driver)
 
-    if (not scrollbar_exists) or page_unavailable:
-        message=f'scrollbar failed to load {not scrollbar_exists} and/or page_unavailable {page_unavailable}; that is not good!'
+        # print("make/model search - initiate scrolling")
+        scroll_down_incrementally(driver)
+        vehicle_listing_links = find_vehicle_listing_links(driver)
+
+        ##  check if I got all the listings or not
+        result_count_expected = get_search_result_count(driver)
+        result_count_actual = len(vehicle_listing_links)
+        _diff = result_count_expected - result_count_actual
+        if _diff >0:
+            message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
+        else:
+            # message = f'Found all {result_count_expected} listings'
+            message = f'found {result_count_actual} / {result_count_expected} listings'
         print(message)
-        driver.quit()
-        return pd.DataFrame(), None
 
+        current_url = driver.current_url
 
-    # print("make/model search - initiate scrolling")
-    scroll_down_incrementally(driver)
-    vehicle_listing_links = find_vehicle_listing_links(driver)
+        ## todo think about a way to navigate to page 2, page3 of search results
+        # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
+        # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
 
-    ##  check if I got all the listings or not
-    result_count_expected = get_search_result_count(driver)
-    result_count_actual = len(vehicle_listing_links)
-    _diff = result_count_expected - result_count_actual
-    if _diff >0:
-        message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
-    else:
-        # message = f'Found all {result_count_expected} listings'
-        message = f'found {result_count_actual} / {result_count_expected} listings'
-    print(message)
+        ## prepare result DF
+        if quit:
+            driver.quit()
+            driver = None
 
-    current_url = driver.current_url
+        df = pd.DataFrame(vehicle_listing_links, columns=['listing_header', 'url'])
+        df = df.drop_duplicates()
+        df['search_url'] = current_url
+        ts = int(time.time())
+        df['make']= make
+        df['model']= model
+        df['search_timestamp'] =ts
+        df['search_metadata'] = str(vehicle_info)
+        print(df.head(1).T)
+        filename =f'search_results_{make}_{model}_{ts}'
+        filepath = f'{parent_directory_url_csvs}{filename}.csv'
+        message=f'saving to {filepath}'
+        print(message)
+        df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
 
-    ## todo think about a way to navigate to page 2, page3 of search results
-    # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
-    # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
-
-    ## prepare result DF
-    if quit:
+    except Exception as e:
+        error_message = traceback.format_exc()
+        print(f"find_listings_for_make_model [{url}] Error Traceback:\n", error_message)
         driver.quit()
         driver = None
-
-    df = pd.DataFrame(vehicle_listing_links, columns=['listing_header', 'url'])
-    df = df.drop_duplicates()
-    df['search_url'] = current_url
-    ts = int(time.time())
-    df['make']= make
-    df['model']= model
-    df['search_timestamp'] =ts
-    df['search_metadata'] = str(vehicle_info)
-    print(df.head(1).T)
-    filename =f'search_results_{make}_{model}_{ts}'
-    filepath = f'{parent_directory_url_csvs}{filename}.csv'
-    message=f'saving to {filepath}'
-    print(message)
-    df.to_csv(filepath, index=False, quoting=csv.QUOTE_ALL)
+        df = pd.DataFrame()
 
     return df, driver
 
@@ -589,15 +628,17 @@ if __name__ == '__main__':
         # {'make':'alfa-romeo','model':'4c'},
         # {'make':'porsche','model':'taycan'},
         # {'make': 'ford', 'model': 'f150','zipcode':'92604','city_state_lower':'irvine-ca'},
-        {'make': 'ford', 'model': 'f150','zipcode':'83223','city_state_lower':'bloomington-id'},
-        {'make': 'bmw', 'model': '4-series','zipcode':'92604','city_state_lower':'irvine-ca'},
+        # {'make': 'ford', 'model': 'f150','zipcode':'83223','city_state_lower':'bloomington-id'},
+        # {'make': 'bmw', 'model': '4-series','zipcode':'92604','city_state_lower':'irvine-ca'},
+        {'make': 'ford', 'model': 'taurus','zipcode':'92101','city_state_lower':'san-diego-ca'},
         # {'make': 'hyundai','model':'ioniq5'}
         # {'make': 'hyundai','model':'asgadgadhadhsfqtdhg'}
     ]
     for vehicle_info in vehicles_to_search:
         print(vehicle_info)
         with timethis():
-            find_listings_for_make_model(vehicle_info)
+            df,driver = find_listings_for_make_model(vehicle_info,quit=False)
+        time.sleep(60)
 
 
     '''
@@ -605,4 +646,9 @@ if __name__ == '__main__':
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=50&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
+    
+    https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
+    https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=5000&searchRadius=0&sortBy=datelistedDESC&zip=92101
+    
+    IP 98.176.105.96
     '''
