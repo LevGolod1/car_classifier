@@ -124,6 +124,26 @@ def find_image_urls(driver) -> list:
         str(driver.page_source).split()
     ))
 
+def find_image_urls_v2(driver) -> list:
+    # more flexible
+    image_url_prefix = 'https://images.autotrader.com/'
+    urls = list(filter(
+        lambda x: str(x).startswith(image_url_prefix),
+        str(driver.page_source).split()
+    ))
+    df_urls = pd.DataFrame({'url': urls})
+    df_urls['filename'] = df_urls['url'].apply(
+        lambda x: os.path.basename(x).split('.')[0]
+    )
+    # for each unique filename, keep the url w the largest image size e.g. 500
+    df_urls = df_urls.sort_values(by=['filename', 'url'], ascending=[1, 0])
+    df_urls.reset_index(drop=True, inplace=True)
+    df_urls2 = df_urls.groupby('filename').head(1)
+    # print(len(df_urls),len(df_urls2))
+    df_urls2
+    return list(df_urls2['url'])
+
+
 
 def clean_text_remove_newline(x:str) -> str:
     # return '|'.join(str(x).strip().replace('|',' ').split('\n'))
@@ -424,6 +444,47 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
     return df, driver
 
 
+def capture_listings_from_current_page(driver) -> tuple:
+    '''
+    :param driver:
+    :return: (pd.DataFrame, driver)
+    '''
+
+    # time.sleep(wait_time) # be smarter and wait until things are actually loaded.
+    scrollbar_exists = wait_for_scrollbar(driver)
+    page_unavailable = check_for_site_unavailable(driver)
+
+    if (not scrollbar_exists) or page_unavailable:
+        message = f'scrollbar failed to load {not scrollbar_exists} and/or page_unavailable {page_unavailable}; that is not good!'
+        print(message)
+        driver.quit()
+        return pd.DataFrame(), None
+
+    scroll_down_incrementally(driver)
+    vehicle_listing_links = find_vehicle_listing_links(driver)
+
+    ##  check if I got all the listings or not
+    result_count_expected = get_search_result_count(driver)
+    result_count_actual = len(vehicle_listing_links)
+    _diff = result_count_expected - result_count_actual
+    if _diff > 0:
+        message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
+    else:
+        # message = f'Found all {result_count_expected} listings'
+        message = f'found {result_count_actual} / {result_count_expected} listings'
+    print(message)
+
+    current_url = driver.current_url
+
+    df = pd.DataFrame(vehicle_listing_links, columns=['listing_header', 'url'])
+    df = df.drop_duplicates()
+    df['search_url'] = current_url
+    search_timestamp = int(time.time())
+    df['search_timestamp'] = search_timestamp
+    print(df.head(1).T)
+    return df, driver
+
+
 def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True) -> tuple:
 
     df_geog = load_geog_df()
@@ -461,54 +522,20 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
         driver.get(url)
         print(f"make/model search [{url}] webpage initiated\n")
 
-        # time.sleep(wait_time) # be smarter and wait until things are actually loaded.
-        scrollbar_exists = wait_for_scrollbar(driver)
+        df,driver = capture_listings_from_current_page(driver)
+        assert len(df)>0
 
-        page_unavailable = check_for_site_unavailable(driver)
-
-        if (not scrollbar_exists) or page_unavailable:
-            message=f'scrollbar failed to load {not scrollbar_exists} and/or page_unavailable {page_unavailable}; that is not good!'
-            print(message)
-            driver.quit()
-            return pd.DataFrame(), None
-
-
-        # print("make/model search - initiate scrolling")
-        scroll_down_incrementally(driver)
-        vehicle_listing_links = find_vehicle_listing_links(driver)
-
-        ##  check if I got all the listings or not
-        result_count_expected = get_search_result_count(driver)
-        result_count_actual = len(vehicle_listing_links)
-        _diff = result_count_expected - result_count_actual
-        if _diff >0:
-            message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
-        else:
-            # message = f'Found all {result_count_expected} listings'
-            message = f'found {result_count_actual} / {result_count_expected} listings'
-        print(message)
-
-        current_url = driver.current_url
-
-        ## todo think about a way to navigate to page 2, page3 of search results
-        # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
-        # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
+        df['make'] = make
+        df['model'] = model
+        df['search_metadata'] = str(vehicle_info)
+        search_timestamp = list(df['search_timestamp'])[0]
 
         ## prepare result DF
         if quit:
             driver.quit()
             driver = None
 
-        df = pd.DataFrame(vehicle_listing_links, columns=['listing_header', 'url'])
-        df = df.drop_duplicates()
-        df['search_url'] = current_url
-        ts = int(time.time())
-        df['make']= make
-        df['model']= model
-        df['search_timestamp'] =ts
-        df['search_metadata'] = str(vehicle_info)
-        print(df.head(1).T)
-        filename =f'search_results_{make}_{model}_{ts}'
+        filename =f'search_results_{make}_{model}_{search_timestamp}'
         filepath = f'{parent_directory_url_csvs}{filename}.csv'
         message=f'saving to {filepath}'
         print(message)
@@ -572,6 +599,7 @@ def compile_search_results_df() ->pd.DataFrame:
     bigdf.head()
     return bigdf
 
+
 def compile_image_urls_df():
     folder=parent_directory_url_csvs
     pattern=r'^[0-9]*\.csv'
@@ -630,7 +658,8 @@ if __name__ == '__main__':
         # {'make': 'ford', 'model': 'f150','zipcode':'92604','city_state_lower':'irvine-ca'},
         # {'make': 'ford', 'model': 'f150','zipcode':'83223','city_state_lower':'bloomington-id'},
         # {'make': 'bmw', 'model': '4-series','zipcode':'92604','city_state_lower':'irvine-ca'},
-        {'make': 'ford', 'model': 'taurus','zipcode':'92101','city_state_lower':'san-diego-ca'},
+        # {'make': 'ford', 'model': 'taurus','zipcode':'92101','city_state_lower':'san-diego-ca'},
+        {'make': 'ford', 'model': 'f150','zipcode':'92101','city_state_lower':'san-diego-ca','first_record':100},
         # {'make': 'hyundai','model':'ioniq5'}
         # {'make': 'hyundai','model':'asgadgadhadhsfqtdhg'}
     ]
@@ -651,4 +680,9 @@ if __name__ == '__main__':
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=5000&searchRadius=0&sortBy=datelistedDESC&zip=92101
     
     IP 98.176.105.96
+    
+    ## todo think about a way to navigate to page 2, page3 of search results
+    # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
+    # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
+    
     '''
