@@ -46,6 +46,7 @@ __pycache__/
 
 # Large data files (optional)
 data/
+_scratch/
 *.jpg
 *.csv
 *.json
