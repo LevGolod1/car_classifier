@@ -29,10 +29,11 @@ from timethis import timethis
 geckodriver_path = "/usr/local/bin/geckodriver"
 chromedriver_path = "/usr/local/bin/chromedriver"
 chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+browser='chrome'
 parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
 parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
 wait_time=10
-scroll_pause_time = 0.5  # Adjust based on load time
+scroll_pause_time = 0.05  # Adjust based on load time
 scroll_distance = 500 # pixels
 max_scrolls = 100
 # headless=True
@@ -59,25 +60,6 @@ def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.F
     return driver
 
 
-# def chrome_driver_init(headless:bool=False, randomize:bool=True):
-#     options = webdriver.ChromeOptions()
-#     options.binary_location = chrome_path
-#     random_user_agent = create_random_user_agent()
-#     options.set_preference("general.useragent.override", random_user_agent)
-#     if headless:
-#         options.add_argument("--headless")
-#     service = Service(chromedriver_path)
-#     driver = webdriver.Chrome(service=service, options=options)
-#     return driver
-
-# def chrome_driver_init():
-#     random_user_agent = create_random_user_agent()
-#     options = webdriver.ChromeOptions()
-#     options.binary_location = chrome_path
-#     options.add_argument(f"user-agent={random_user_agent}")
-#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-#     driver.get("https://www.google.com")
-#     return driver
 
 def chrome_driver_init():
     import webdriver_manager
@@ -87,6 +69,7 @@ def chrome_driver_init():
     chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
     options = webdriver.ChromeOptions()
     options.binary_location = chrome_path
+    options.page_load_strategy = "none"
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get("https://www.google.com")
     return driver
@@ -316,25 +299,34 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
     )
 
     ## try to scroll in a more naturalistic way    # scroll gradually until there all new image urls are captured
-    image_urls = find_image_urls(driver)
+    image_urls = find_image_urls_v2(driver)
     last_length = len(image_urls)
     i = 0
-    while True:
+    # while True:
+    while i <= 50:
         # Scroll down by a small amount
         driver.execute_script(f"arguments[0].scrollTop += {scroll_distance};", scroll_panel)
         # print(f'they see me scrollin, they hatin ({i})')
         i += 1
         time.sleep(scroll_pause_time)  # Wait for content to load
-        image_urls = find_image_urls(driver)
+        image_urls = find_image_urls_v2(driver)
         new_length = len(image_urls)
-        if (new_length == last_length) or (i >= max_scrolls):  # If no more content is loading, break
-            print(f'cant scroll anymore boss {i}')
-            break
+        # if (new_length == last_length) or (i >= max_scrolls):  # If no more content is loading, break
+        #     print(f'cant scroll anymore boss {i}')
+        #     break
         last_length = new_length
 
     return image_urls
 
 
+
+def driver_init(browser:str=browser):
+    if browser == 'chrome':
+        return chrome_driver_init()
+    elif browser == 'firefox':
+        return firefox_driver_init(headless=headless)
+
+    return None
 
 
 def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
@@ -343,7 +335,8 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
     vehicle_id = url_cleaned.split('/')[-1]
 
     ## initialize browser session
-    driver = firefox_driver_init(headless=headless)
+    # driver = firefox_driver_init(headless=headless)
+    driver = driver_init()
 
     ## giant try-except because otherwise the driver will not get closed at the end
     df=pd.DataFrame()
@@ -546,7 +539,9 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
 
     ## initialize browser session - unless of course it is already initialized
     if driver is None:
-        driver = firefox_driver_init(headless=headless)
+        # driver = firefox_driver_init(headless=headless)
+        # driver = chrome_driver_init()
+        driver = driver_init()
 
     ## giant try-except because otherwise the driver will not get closed at the end
     df=pd.DataFrame()
@@ -708,7 +703,6 @@ if __name__ == '__main__':
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=50&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
-    
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=5000&searchRadius=0&sortBy=datelistedDESC&zip=92101
     
@@ -717,5 +711,15 @@ if __name__ == '__main__':
     ## todo think about a way to navigate to page 2, page3 of search results
     # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
     # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
-    
     '''
+
+
+
+# def chrome_driver_init():
+#     random_user_agent = create_random_user_agent()
+#     options = webdriver.ChromeOptions()
+#     options.binary_location = chrome_path
+#     options.add_argument(f"user-agent={random_user_agent}")
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+#     driver.get("https://www.google.com")
+#     return driver
