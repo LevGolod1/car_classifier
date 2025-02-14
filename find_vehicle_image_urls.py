@@ -6,9 +6,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+from webdriver_manager.chrome import ChromeDriverManager
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
-
 import random
 import datetime as dt
 import time
@@ -26,6 +27,8 @@ from timethis import timethis
 ####################################
 ### Settings
 geckodriver_path = "/usr/local/bin/geckodriver"
+chromedriver_path = "/usr/local/bin/chromedriver"
+chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
 parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
 parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
 wait_time=10
@@ -35,6 +38,60 @@ max_scrolls = 100
 # headless=True
 headless=False
 ####################################
+
+
+def create_random_user_agent():
+    software_names = [SoftwareName.CHROME.value, SoftwareName.FIREFOX.value]
+    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.MACOS.value]
+    ua = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
+    random_user_agent = ua.get_random_user_agent()
+    return random_user_agent
+
+
+def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.Firefox:
+    firefox_options = Options()
+    random_user_agent = create_random_user_agent()
+    firefox_options.set_preference("general.useragent.override", random_user_agent)
+    if headless:
+        firefox_options.add_argument("--headless")
+    service = Service(geckodriver_path)
+    driver = webdriver.Firefox(service=service, options=firefox_options)
+    return driver
+
+
+# def chrome_driver_init(headless:bool=False, randomize:bool=True):
+#     options = webdriver.ChromeOptions()
+#     options.binary_location = chrome_path
+#     random_user_agent = create_random_user_agent()
+#     options.set_preference("general.useragent.override", random_user_agent)
+#     if headless:
+#         options.add_argument("--headless")
+#     service = Service(chromedriver_path)
+#     driver = webdriver.Chrome(service=service, options=options)
+#     return driver
+
+# def chrome_driver_init():
+#     random_user_agent = create_random_user_agent()
+#     options = webdriver.ChromeOptions()
+#     options.binary_location = chrome_path
+#     options.add_argument(f"user-agent={random_user_agent}")
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+#     driver.get("https://www.google.com")
+#     return driver
+
+def chrome_driver_init():
+    import webdriver_manager
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    options = webdriver.ChromeOptions()
+    options.binary_location = chrome_path
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.get("https://www.google.com")
+    return driver
+
+
 
 def get_vehicle_make_model_list():
     vehicles = [
@@ -234,30 +291,6 @@ def check_for_site_unavailable(driver):
     return 'site is currently unavailable' in str(driver.page_source)
 
 
-
-def create_random_user_agent():
-    software_names = [SoftwareName.CHROME.value, SoftwareName.FIREFOX.value]
-    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.MACOS.value]
-    ua = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
-    random_user_agent = ua.get_random_user_agent()
-    return random_user_agent
-
-
-def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.Firefox:
-
-
-    firefox_options = Options()
-
-    random_user_agent = create_random_user_agent()
-    firefox_options.set_preference("general.useragent.override", random_user_agent)
-
-    if headless:
-        firefox_options.add_argument("--headless")
-
-    service = Service(geckodriver_path)
-    driver = webdriver.Firefox(service=service, options=firefox_options)
-
-    return driver
 
 def get_image_urls_from_view_all_media_button(driver) -> list:
     '''
