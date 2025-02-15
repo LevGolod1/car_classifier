@@ -32,8 +32,9 @@ chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Conten
 browser='chrome'
 parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
 parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
+vehicle_url_template='https://www.autotrader.com/cars-for-sale/vehicle/{vehicle_id}'
 wait_time=10
-scroll_pause_time = 0.05  # Adjust based on load time
+scroll_pause_time = 0.2  # Adjust based on load time
 scroll_distance = 500 # pixels
 max_scrolls = 100
 # headless=True
@@ -69,7 +70,7 @@ def chrome_driver_init():
     chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
     options = webdriver.ChromeOptions()
     options.binary_location = chrome_path
-    options.page_load_strategy = "none"
+    # options.page_load_strategy = "none" # too aggressive, not worth it
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get("https://www.google.com")
     return driver
@@ -302,8 +303,8 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
     image_urls = find_image_urls_v2(driver)
     last_length = len(image_urls)
     i = 0
-    # while True:
-    while i <= 50:
+    n_useless_scrolls=0
+    while True:
         # Scroll down by a small amount
         driver.execute_script(f"arguments[0].scrollTop += {scroll_distance};", scroll_panel)
         # print(f'they see me scrollin, they hatin ({i})')
@@ -311,9 +312,16 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
         time.sleep(scroll_pause_time)  # Wait for content to load
         image_urls = find_image_urls_v2(driver)
         new_length = len(image_urls)
-        # if (new_length == last_length) or (i >= max_scrolls):  # If no more content is loading, break
-        #     print(f'cant scroll anymore boss {i}')
-        #     break
+        n_useless_scrolls += int(new_length == last_length)
+
+        if (n_useless_scrolls >= 5):
+            print(f'the futility is unbearable {i} {n_useless_scrolls}')
+            break
+
+        if (i >= max_scrolls):
+            print(f'cant scroll anymore boss {i} {n_useless_scrolls}')
+            break
+
         last_length = new_length
 
     return image_urls
@@ -604,10 +612,8 @@ def compile_search_results_df() ->pd.DataFrame:
     bigdf= None
 
     files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
-
-    # file=files[0]
     for file in files:
-        print(file)
+        # print(file)
         try:
             df=pd.read_csv(folder+file, usecols=usecols)
             df=df[usecols]
@@ -648,7 +654,7 @@ def compile_image_urls_df():
     for file in files:
         print(file)
         try:
-            df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
+            # df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
             df=df[usecols]
             df['filename']=file
         except ValueError:
