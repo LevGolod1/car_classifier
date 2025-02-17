@@ -96,8 +96,8 @@ def get_vehicle_make_model_list():
         {'make': 'toyota', 'model': 'tacoma', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'tundra', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'corolla', 'body_style': 'sedan'},
-        {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
-        {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
+        # {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
+        # {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
     ]
     return vehicles
 
@@ -150,10 +150,13 @@ def get_clean_vin(vin_text:str) -> str:
 
 
 def get_search_result_count(driver) -> int:
-    result_count_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="resultsCount"]')
-    result_count_text = result_count_element.text
-    result_count = int(result_count_text.split(' ')[0].replace(',',''))
-    return result_count
+    try:
+        result_count_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="resultsCount"]')
+        result_count_text = result_count_element.text
+        result_count = int(result_count_text.split(' ')[0].replace(',',''))
+        return result_count
+    except:
+        return -1
 
 
 def find_image_urls(driver) -> list:
@@ -504,7 +507,6 @@ def capture_listings_from_current_page(driver) -> tuple:
     if _diff > 0:
         message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
     else:
-        # message = f'Found all {result_count_expected} listings'
         message = f'found {result_count_actual} / {result_count_expected} listings'
     print(message)
 
@@ -625,7 +627,7 @@ def compile_search_results_df() ->pd.DataFrame:
 
         bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
         # bigdf=bigdf.drop_duplicates(subset=['url'])
-        print(bigdf.shape)
+        # print(bigdf.shape)
 
     bigdf['url_clean'] = bigdf['url'].apply(clean_vehicle_url)
     bigdf['vehicle_id'] = bigdf['url_clean'].apply(lambda x: str(x).split('/')[-1] )
@@ -652,9 +654,9 @@ def compile_image_urls_df():
     files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
 
     for file in files:
-        print(file)
+        # print(file)
         try:
-            # df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
+            df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
             df=df[usecols]
             df['filename']=file
         except ValueError:
@@ -663,7 +665,7 @@ def compile_image_urls_df():
 
 
         bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
-        print(bigdf.shape)
+        # print(bigdf.shape)
 
     return bigdf
 
