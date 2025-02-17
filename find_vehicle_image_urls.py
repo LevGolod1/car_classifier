@@ -6,9 +6,10 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+from webdriver_manager.chrome import ChromeDriverManager
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
-
 import random
 import datetime as dt
 import time
@@ -26,15 +27,55 @@ from timethis import timethis
 ####################################
 ### Settings
 geckodriver_path = "/usr/local/bin/geckodriver"
+chromedriver_path = "/usr/local/bin/chromedriver"
+chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+browser='chrome'
 parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
 parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
+vehicle_url_template='https://www.autotrader.com/cars-for-sale/vehicle/{vehicle_id}'
 wait_time=10
-scroll_pause_time = 0.5  # Adjust based on load time
+scroll_pause_time = 0.2  # Adjust based on load time
 scroll_distance = 500 # pixels
 max_scrolls = 100
 # headless=True
 headless=False
 ####################################
+
+
+def create_random_user_agent():
+    software_names = [SoftwareName.CHROME.value, SoftwareName.FIREFOX.value]
+    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.MACOS.value]
+    ua = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
+    random_user_agent = ua.get_random_user_agent()
+    return random_user_agent
+
+
+def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.Firefox:
+    firefox_options = Options()
+    random_user_agent = create_random_user_agent()
+    firefox_options.set_preference("general.useragent.override", random_user_agent)
+    if headless:
+        firefox_options.add_argument("--headless")
+    service = Service(geckodriver_path)
+    driver = webdriver.Firefox(service=service, options=firefox_options)
+    return driver
+
+
+
+def chrome_driver_init():
+    import webdriver_manager
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+    options = webdriver.ChromeOptions()
+    options.binary_location = chrome_path
+    # options.page_load_strategy = "none" # too aggressive, not worth it
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    driver.get("https://www.google.com")
+    return driver
+
+
 
 def get_vehicle_make_model_list():
     vehicles = [
@@ -55,8 +96,8 @@ def get_vehicle_make_model_list():
         {'make': 'toyota', 'model': 'tacoma', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'tundra', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'corolla', 'body_style': 'sedan'},
-        {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
-        {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
+        # {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
+        # {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
     ]
     return vehicles
 
@@ -109,10 +150,13 @@ def get_clean_vin(vin_text:str) -> str:
 
 
 def get_search_result_count(driver) -> int:
-    result_count_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="resultsCount"]')
-    result_count_text = result_count_element.text
-    result_count = int(result_count_text.split(' ')[0].replace(',',''))
-    return result_count
+    try:
+        result_count_element = driver.find_element(By.CSS_SELECTOR, '[data-cmp="resultsCount"]')
+        result_count_text = result_count_element.text
+        result_count = int(result_count_text.split(' ')[0].replace(',',''))
+        return result_count
+    except:
+        return -1
 
 
 def find_image_urls(driver) -> list:
@@ -235,30 +279,6 @@ def check_for_site_unavailable(driver):
 
 
 
-def create_random_user_agent():
-    software_names = [SoftwareName.CHROME.value, SoftwareName.FIREFOX.value]
-    operating_systems = [OperatingSystem.WINDOWS.value, OperatingSystem.MACOS.value]
-    ua = UserAgent(software_names=software_names, operating_systems=operating_systems, limit=100)
-    random_user_agent = ua.get_random_user_agent()
-    return random_user_agent
-
-
-def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.Firefox:
-
-
-    firefox_options = Options()
-
-    random_user_agent = create_random_user_agent()
-    firefox_options.set_preference("general.useragent.override", random_user_agent)
-
-    if headless:
-        firefox_options.add_argument("--headless")
-
-    service = Service(geckodriver_path)
-    driver = webdriver.Firefox(service=service, options=firefox_options)
-
-    return driver
-
 def get_image_urls_from_view_all_media_button(driver) -> list:
     '''
     Assuming there is a button "View All Media" click on it and scroll through the images
@@ -283,25 +303,41 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
     )
 
     ## try to scroll in a more naturalistic way    # scroll gradually until there all new image urls are captured
-    image_urls = find_image_urls(driver)
+    image_urls = find_image_urls_v2(driver)
     last_length = len(image_urls)
     i = 0
+    n_useless_scrolls=0
     while True:
         # Scroll down by a small amount
         driver.execute_script(f"arguments[0].scrollTop += {scroll_distance};", scroll_panel)
         # print(f'they see me scrollin, they hatin ({i})')
         i += 1
         time.sleep(scroll_pause_time)  # Wait for content to load
-        image_urls = find_image_urls(driver)
+        image_urls = find_image_urls_v2(driver)
         new_length = len(image_urls)
-        if (new_length == last_length) or (i >= max_scrolls):  # If no more content is loading, break
-            print(f'cant scroll anymore boss {i}')
+        n_useless_scrolls += int(new_length == last_length)
+
+        if (n_useless_scrolls >= 5):
+            print(f'the futility is unbearable {i} {n_useless_scrolls}')
             break
+
+        if (i >= max_scrolls):
+            print(f'cant scroll anymore boss {i} {n_useless_scrolls}')
+            break
+
         last_length = new_length
 
     return image_urls
 
 
+
+def driver_init(browser:str=browser):
+    if browser == 'chrome':
+        return chrome_driver_init()
+    elif browser == 'firefox':
+        return firefox_driver_init(headless=headless)
+
+    return None
 
 
 def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
@@ -310,7 +346,8 @@ def process_vehicle_webpage(url:str, quit:bool=True) -> tuple:
     vehicle_id = url_cleaned.split('/')[-1]
 
     ## initialize browser session
-    driver = firefox_driver_init(headless=headless)
+    # driver = firefox_driver_init(headless=headless)
+    driver = driver_init()
 
     ## giant try-except because otherwise the driver will not get closed at the end
     df=pd.DataFrame()
@@ -470,7 +507,6 @@ def capture_listings_from_current_page(driver) -> tuple:
     if _diff > 0:
         message = f'WARNING found {result_count_actual} / {result_count_expected} listings ; {_diff} are missing '
     else:
-        # message = f'Found all {result_count_expected} listings'
         message = f'found {result_count_actual} / {result_count_expected} listings'
     print(message)
 
@@ -513,7 +549,9 @@ def find_listings_for_make_model(vehicle_info:dict, driver=None, quit:bool=True)
 
     ## initialize browser session - unless of course it is already initialized
     if driver is None:
-        driver = firefox_driver_init(headless=headless)
+        # driver = firefox_driver_init(headless=headless)
+        # driver = chrome_driver_init()
+        driver = driver_init()
 
     ## giant try-except because otherwise the driver will not get closed at the end
     df=pd.DataFrame()
@@ -576,10 +614,8 @@ def compile_search_results_df() ->pd.DataFrame:
     bigdf= None
 
     files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
-
-    # file=files[0]
     for file in files:
-        print(file)
+        # print(file)
         try:
             df=pd.read_csv(folder+file, usecols=usecols)
             df=df[usecols]
@@ -591,7 +627,7 @@ def compile_search_results_df() ->pd.DataFrame:
 
         bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
         # bigdf=bigdf.drop_duplicates(subset=['url'])
-        print(bigdf.shape)
+        # print(bigdf.shape)
 
     bigdf['url_clean'] = bigdf['url'].apply(clean_vehicle_url)
     bigdf['vehicle_id'] = bigdf['url_clean'].apply(lambda x: str(x).split('/')[-1] )
@@ -618,7 +654,7 @@ def compile_image_urls_df():
     files = [x for x in os.listdir(folder) if bool(re.search(pattern, x))]
 
     for file in files:
-        print(file)
+        # print(file)
         try:
             df=pd.read_csv(folder+file, usecols=usecols, dtype=dtypes)
             df=df[usecols]
@@ -629,7 +665,7 @@ def compile_image_urls_df():
 
 
         bigdf = pd.concat([bigdf, df], ignore_index=True) if bigdf is not None else df
-        print(bigdf.shape)
+        # print(bigdf.shape)
 
     return bigdf
 
@@ -675,7 +711,6 @@ if __name__ == '__main__':
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=50&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/san-diego-ca?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/bmw/3-series/houston-tx?firstRecord=5000&searchRadius=100&sortBy=distanceASC&zip=77038
-    
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
     https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=5000&searchRadius=0&sortBy=datelistedDESC&zip=92101
     
@@ -684,5 +719,15 @@ if __name__ == '__main__':
     ## todo think about a way to navigate to page 2, page3 of search results
     # this can be done by clicking or it can be done by pre-populating the url in a certain way e.g. ?firstRecord=50
     # https://www.autotrader.com/cars-for-sale/ford/taurus/san-diego-ca?firstRecord=50&searchRadius=0&sortBy=distanceASC&zip=92101
-    
     '''
+
+
+
+# def chrome_driver_init():
+#     random_user_agent = create_random_user_agent()
+#     options = webdriver.ChromeOptions()
+#     options.binary_location = chrome_path
+#     options.add_argument(f"user-agent={random_user_agent}")
+#     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+#     driver.get("https://www.google.com")
+#     return driver
