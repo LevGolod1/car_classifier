@@ -1,45 +1,25 @@
-import selenium
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
-from webdriver_manager.chrome import ChromeDriverManager
 from random_user_agent.user_agent import UserAgent
 from random_user_agent.params import SoftwareName, OperatingSystem
-import random
-import datetime as dt
 import time
-import matplotlib.pyplot as plt
 import re
-import cv2
 import os
-import numpy as np
 import pandas as pd
 import csv
 import traceback
 from timethis import timethis
 
-
-####################################
-### Settings
-geckodriver_path = "/usr/local/bin/geckodriver"
-chromedriver_path = "/usr/local/bin/chromedriver"
-chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
-browser='chrome'
-parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
-parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
-vehicle_url_template='https://www.autotrader.com/cars-for-sale/vehicle/{vehicle_id}'
-wait_time=10
-scroll_pause_time = 0.2  # Adjust based on load time
-scroll_distance = 500 # pixels
-max_scrolls = 100
-# headless=True
-headless=False
-####################################
+from common_params import (
+    geckodriver_path, browser, parent_directory_url_csvs, wait_time, scroll_pause_time, \
+    scroll_distance, max_scrolls, headless
+)
 
 
 def create_random_user_agent():
@@ -63,7 +43,6 @@ def firefox_driver_init(headless:bool=False, randomize:bool=True) -> webdriver.F
 
 
 def chrome_driver_init():
-    import webdriver_manager
     from selenium import webdriver
     from selenium.webdriver.chrome.service import Service
     from webdriver_manager.chrome import ChromeDriverManager
@@ -108,8 +87,8 @@ def load_geog_df() -> pd.DataFrame:
     :return:
     beverly-hills-ca
     '''
-    # zips_filepath='~/Projects/car_classifier/data/simplemaps_uszips_basicv1.90/uszips.csv'
-    zips_filepath='./data/simplemaps_uszips_basicv1.90/uszips.csv'
+    zips_filepath='~/Projects/car_classifier/data/simplemaps_uszips_basicv1.90/uszips.csv'
+    # zips_filepath='./data/simplemaps_uszips_basicv1.90/uszips.csv'
     zips_df = pd.read_csv(zips_filepath)
     zips_df['zip'] =zips_df['zip'].astype(str).str.zfill(5)
     zips_df['city_state_lower'] = zips_df['city'].str.lower().str.replace(' ','-') + '-' + \
@@ -264,7 +243,7 @@ def scroll_down_incrementally(driver, scroll_distance=scroll_distance, wait=0.1,
     # todo should start by scrolling all the way to the top?
     current_pct = get_scroll_percentage(driver)
     i=0
-    while (current_pct < 100) and (i<=max_scrolls):
+    while (current_pct < 100) and (i <= max_scrolls):
         i+=1
         message = f'scrolling {i}, {current_pct}%'
         if verbose:
@@ -331,7 +310,7 @@ def get_image_urls_from_view_all_media_button(driver) -> list:
 
 
 
-def driver_init(browser:str=browser):
+def driver_init(browser:str= browser):
     if browser == 'chrome':
         return chrome_driver_init()
     elif browser == 'firefox':
@@ -601,7 +580,7 @@ def compile_search_results_df() ->pd.DataFrame:
     '''
     ## compile search results from multiple csvs intoo one df
     # folder="/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/"
-    folder=parent_directory_url_csvs
+    folder= parent_directory_url_csvs
     pattern=r'search_results_.*[0-9]*csv'
     usecols=['listing_header',
      'url',
@@ -637,7 +616,7 @@ def compile_search_results_df() ->pd.DataFrame:
 
 
 def compile_image_urls_df():
-    folder=parent_directory_url_csvs
+    folder= parent_directory_url_csvs
     pattern=r'^[0-9]*\.csv'
     dtypes={'vehicle_image_url': 'str',
     'vehicle_id': 'int',
