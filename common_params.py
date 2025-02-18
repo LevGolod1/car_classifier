@@ -1,0 +1,12 @@
+geckodriver_path = "/usr/local/bin/geckodriver"
+chromedriver_path = "/usr/local/bin/chromedriver"
+chrome_path = "/Applications/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+browser='chrome'
+parent_directory_url_csvs='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_metadata/'
+parent_directory_images='/Users/levgolod/Projects/car_classifier/data/autotrader/vehicle_images/'
+vehicle_url_template='https://www.autotrader.com/cars-for-sale/vehicle/{vehicle_id}'
+wait_time=10
+scroll_pause_time = 0.2  # Adjust based on load time
+scroll_distance = 500 # pixels
+max_scrolls = 100
+headless=False
