@@ -75,8 +75,8 @@ def get_vehicle_make_model_list():
         {'make': 'toyota', 'model': 'tacoma', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'tundra', 'body_style': 'truck'},
         {'make': 'toyota', 'model': 'corolla', 'body_style': 'sedan'},
-        # {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
-        # {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
+        {'make': 'volvo', 'model': 'v90', 'body_style': 'wagon'},
+        {'make': 'volvo', 'model': 'c30', 'body_style': 'wagon'},
     ]
     return vehicles
 
