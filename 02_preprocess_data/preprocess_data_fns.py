@@ -259,7 +259,7 @@ def process_image_files(input_files:list, image_size:int=256) -> list:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image_array = np.array(gray)
         tensor = torch.tensor(image_array, dtype=torch.float32)
-        tensor = tensor.unsqueeze(0)
+        # tensor = tensor.unsqueeze(0)
         results+=[(tensor,label)]
         # results+=[(image_array,label)]
     #
